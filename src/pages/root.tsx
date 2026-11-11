@@ -12,6 +12,7 @@ import {
   ACCOUNT_REGISTRATION,
   ALLOW_UNAUTHENTICATED,
   BRANDING,
+  ENNIO_AUTH,
   HIDE_HISTORY,
   HTTP_ALLOWED,
   UNAUTHENTICATED_USER_SHARING,
@@ -23,7 +24,7 @@ export const root = new Elysia().use(userService).get(
   "/",
   async ({ jwt, redirect, cookie: { auth, jobId } }) => {
     if (!ALLOW_UNAUTHENTICATED) {
-      if (FIRST_RUN) {
+      if (FIRST_RUN && !ENNIO_AUTH) {
         return redirect(`${WEBROOT}/setup`, 302);
       }
 

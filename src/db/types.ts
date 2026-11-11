@@ -20,4 +20,5 @@ export class User {
   id!: number;
   email!: string;
   password!: string;
+  ennio_id?: string | null;
 }

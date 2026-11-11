@@ -8,10 +8,13 @@ import {
   ACCOUNT_REGISTRATION,
   ALLOW_UNAUTHENTICATED,
   BRANDING,
+  ENNIO_AUTH,
+  ENNIO_PROJECT,
   HIDE_HISTORY,
   HTTP_ALLOWED,
   WEBROOT,
 } from "../helpers/env";
+import { upsertEnnioUser, verifyEnnioToken } from "../services/ennio";
 import { userService } from "../services/user";
 
 export { userService } from "../services/user";
@@ -95,6 +98,141 @@ function LoginPage({ error, email = "" }: { error?: string; email?: string }) {
   );
 }
 
+/**
+ * The sign-in page for the shared ennio.vip account. The library draws its own
+ * sheet; this page only needs the bridge that trades the library's short-lived
+ * token for a ConvertX session cookie.
+ */
+function EnnioLoginPage() {
+  const bridge = `
+    (function () {
+      var root = ${JSON.stringify(WEBROOT)};
+      var audience = ${JSON.stringify(ENNIO_PROJECT)};
+      var busy = false;
+      async function exchange() {
+        if (busy || !window.EnnioAuth || !window.EnnioAuth.signedIn) return;
+        busy = true;
+        try {
+          var token = await window.EnnioAuth.token(audience);
+          var response = await fetch(root + "/auth/ennio", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ token: token })
+          });
+          if (response.ok) {
+            window.location.replace(root + "/");
+            return;
+          }
+        } catch (error) {
+          console.error("[ennio]", error);
+        }
+        busy = false;
+      }
+      document.addEventListener("ennio:auth:ready", exchange);
+      document.addEventListener("ennio:auth:change", exchange);
+      window.addEventListener("load", exchange);
+    })();
+  `;
+
+  return (
+    <BaseHtml webroot={WEBROOT} title="ConvertX | Login">
+      <>
+        <Header
+          webroot={WEBROOT}
+          branding={BRANDING}
+          accountRegistration={ACCOUNT_REGISTRATION}
+          allowUnauthenticated={ALLOW_UNAUTHENTICATED}
+          hideHistory={HIDE_HISTORY}
+        />
+        <main
+          class={`
+            w-full flex-1 px-2
+            sm:px-4
+          `}
+        >
+          <article class="article">
+            <h1 class="mb-2 text-xl">Sign in</h1>
+            <p class="mb-4 text-neutral-400">
+              This converter uses your ennio.vip account. The sign-in sheet opens on its own.
+            </p>
+            <button
+              type="button"
+              class="w-full btn-primary"
+              onclick="window.EnnioAuth && window.EnnioAuth.open()"
+            >
+              Open sign-in
+            </button>
+          </article>
+        </main>
+        <script
+          src="https://api.ennio.vip/v1/auth.js"
+          data-guard="required"
+          data-mode="overlay"
+          data-theme="dark"
+          defer
+        />
+        <script>{bridge}</script>
+      </>
+    </BaseHtml>
+  );
+}
+
+/**
+ * ConvertX signs out locally, then the shared login signs out the ennio.vip
+ * session. Without the second step the library would sign the page back in at
+ * once.
+ */
+function EnnioLogoutPage() {
+  const logout = `
+    (function () {
+      var root = ${JSON.stringify(WEBROOT)};
+      var tries = 0;
+      function finish() {
+        window.location.replace(root + "/login");
+      }
+      function run() {
+        if (window.EnnioAuth) {
+          window.EnnioAuth.logout().catch(function () {}).then(finish);
+          return;
+        }
+        if (++tries > 50) {
+          finish();
+          return;
+        }
+        window.setTimeout(run, 100);
+      }
+      run();
+    })();
+  `;
+
+  return (
+    <BaseHtml webroot={WEBROOT} title="ConvertX | Logout">
+      <>
+        <main
+          class={`
+            w-full flex-1 px-2
+            sm:px-4
+          `}
+        >
+          <article class="article">
+            <h1 class="mb-2 text-xl">Signing out</h1>
+            <p class="text-neutral-400">Closing your ennio.vip session.</p>
+          </article>
+        </main>
+        <script
+          src="https://api.ennio.vip/v1/auth.js"
+          data-guard="optional"
+          data-mode="none"
+          data-theme="dark"
+          defer
+        />
+        <script>{logout}</script>
+      </>
+    </BaseHtml>
+  );
+}
+
 function AccountPage({ email, error }: { email: string; error?: string }) {
   return (
     <BaseHtml webroot={WEBROOT} title="ConvertX | Account">
@@ -165,7 +303,7 @@ function AccountPage({ email, error }: { email: string; error?: string }) {
 export const user = new Elysia()
   .use(userService)
   .get("/setup", ({ redirect }) => {
-    if (!FIRST_RUN) {
+    if (ENNIO_AUTH || !FIRST_RUN) {
       return redirect(`${WEBROOT}/login`, 302);
     }
 
@@ -226,7 +364,7 @@ export const user = new Elysia()
     );
   })
   .get("/register", ({ redirect }) => {
-    if (!ACCOUNT_REGISTRATION) {
+    if (ENNIO_AUTH || !ACCOUNT_REGISTRATION) {
       return redirect(`${WEBROOT}/login`, 302);
     }
 
@@ -283,6 +421,10 @@ export const user = new Elysia()
   .post(
     "/register",
     async ({ body: { email, password }, set, redirect, jwt, cookie: { auth } }) => {
+      if (ENNIO_AUTH) {
+        return redirect(`${WEBROOT}/login`, 302);
+      }
+
       if (!ACCOUNT_REGISTRATION && !FIRST_RUN) {
         return redirect(`${WEBROOT}/login`, 302);
       }
@@ -338,7 +480,7 @@ export const user = new Elysia()
   .get(
     "/login",
     async ({ jwt, redirect, cookie: { auth } }) => {
-      if (FIRST_RUN) {
+      if (!ENNIO_AUTH && FIRST_RUN) {
         return redirect(`${WEBROOT}/setup`, 302);
       }
 
@@ -353,6 +495,10 @@ export const user = new Elysia()
         auth.remove();
       }
 
+      if (ENNIO_AUTH) {
+        return <EnnioLoginPage />;
+      }
+
       return <LoginPage />;
     },
     { body: "signIn", cookie: "optionalSession" },
@@ -360,6 +506,10 @@ export const user = new Elysia()
   .post(
     "/login",
     async function handler({ body, set, redirect, jwt, cookie: { auth } }) {
+      if (ENNIO_AUTH) {
+        return redirect(`${WEBROOT}/login`, 302);
+      }
+
       const existingUser = db.query("SELECT * FROM users WHERE email = ?").as(User).get(body.email);
 
       if (!existingUser) {
@@ -398,9 +548,54 @@ export const user = new Elysia()
     },
     { body: "signIn" },
   )
+  .post(
+    "/auth/ennio",
+    async ({ body: { token }, set, jwt, cookie: { auth } }) => {
+      if (!ENNIO_AUTH) {
+        set.status = 404;
+        return { success: false, message: "The ennio.vip login is not enabled." };
+      }
+
+      const claims = await verifyEnnioToken(token);
+      if (!claims) {
+        set.status = 401;
+        return { success: false, message: "The ennio.vip token is not valid." };
+      }
+
+      const user = await upsertEnnioUser(claims);
+      const accessToken = await jwt.sign({ id: String(user.id) });
+
+      if (!auth) {
+        set.status = 500;
+        return {
+          success: false,
+          message: "No auth cookie, perhaps your browser is blocking cookies.",
+        };
+      }
+
+      auth.set({
+        value: accessToken,
+        httpOnly: true,
+        secure: !HTTP_ALLOWED,
+        maxAge: 60 * 60 * 24,
+        sameSite: "lax",
+      });
+
+      return { success: true };
+    },
+    {
+      body: t.Object({
+        token: t.String({ maxLength: 4096 }),
+      }),
+    },
+  )
   .get("/logoff", ({ redirect, cookie: { auth } }) => {
     if (auth?.value) {
       auth.remove();
+    }
+
+    if (ENNIO_AUTH) {
+      return <EnnioLogoutPage />;
     }
 
     return redirect(`${WEBROOT}/login`, 302);
@@ -415,6 +610,10 @@ export const user = new Elysia()
   .get(
     "/account",
     async ({ user, redirect }) => {
+      if (ENNIO_AUTH) {
+        return redirect(`${WEBROOT}/`, 302);
+      }
+
       if (!user) {
         return redirect(`${WEBROOT}/`, 302);
       }
@@ -434,6 +633,10 @@ export const user = new Elysia()
   .post(
     "/account",
     async function handler({ body, set, redirect, jwt, cookie: { auth } }) {
+      if (ENNIO_AUTH) {
+        return redirect(`${WEBROOT}/`, 302);
+      }
+
       if (!auth?.value) {
         return redirect(`${WEBROOT}/login`, 302);
       }

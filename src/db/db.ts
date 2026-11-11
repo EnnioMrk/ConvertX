@@ -46,6 +46,21 @@ export function initializeDatabase(db: Database): void {
     console.log("Updated database to version 1.");
   }
 
+  if ((dbVersion?.user_version ?? 0) < 2) {
+    const userColumns = db.query("PRAGMA table_info(users)").all() as { name: string }[];
+    const hasEnnioId = userColumns.some((c) => c.name.toLowerCase() === "ennio_id");
+
+    if (!hasEnnioId) {
+      db.exec("ALTER TABLE users ADD COLUMN ennio_id TEXT;");
+    }
+
+    db.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS users_ennio_id ON users(ennio_id) WHERE ennio_id IS NOT NULL;",
+    );
+    db.exec("PRAGMA user_version = 2;");
+    console.log("Updated database to version 2.");
+  }
+
   // enable WAL mode
   db.exec("PRAGMA journal_mode = WAL;");
 }

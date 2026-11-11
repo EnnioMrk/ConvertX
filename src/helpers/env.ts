@@ -6,6 +6,15 @@ export const HTTP_ALLOWED = process.env.HTTP_ALLOWED?.toLowerCase() === "true" |
 export const ALLOW_UNAUTHENTICATED =
   process.env.ALLOW_UNAUTHENTICATED?.toLowerCase() === "true" || false;
 
+/** Use the shared ennio.vip login instead of ConvertX accounts. */
+export const ENNIO_AUTH = process.env.ENNIO_AUTH?.toLowerCase() === "true" || false;
+
+/** The ennio.vip API that verifies tokens. */
+export const ENNIO_API = (process.env.ENNIO_API ?? "https://api.ennio.vip").replace(/\/$/, "");
+
+/** The project slug this deployment is. It becomes the token audience. */
+export const ENNIO_PROJECT = process.env.ENNIO_PROJECT ?? "convertx";
+
 export const AUTO_DELETE_EVERY_N_HOURS = process.env.AUTO_DELETE_EVERY_N_HOURS
   ? Number(process.env.AUTO_DELETE_EVERY_N_HOURS)
   : 24;

@@ -1,3 +1,5 @@
+import { ENNIO_AUTH } from "../helpers/env";
+
 export const Header = ({
   loggedIn,
   accountRegistration,
@@ -30,7 +32,7 @@ export const Header = ({
             </a>
           </li>
         )}
-        {!allowUnauthenticated ? (
+        {!allowUnauthenticated && !ENNIO_AUTH ? (
           <li>
             <a
               class={`

@@ -15,6 +15,9 @@ process.env.CONVERTX_TEST_ROOT = testRoot;
 // reads them once at import; tests switch them with setEnv() from tests/pages/helpers/app.ts.
 for (const name of [
   "ACCOUNT_REGISTRATION",
+  "ENNIO_AUTH",
+  "ENNIO_API",
+  "ENNIO_PROJECT",
   "HTTP_ALLOWED",
   "ALLOW_UNAUTHENTICATED",
   "AUTO_DELETE_EVERY_N_HOURS",

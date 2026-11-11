@@ -112,6 +112,26 @@ All are optional, JWT_SECRET is recommended to be set.
 | UNAUTHENTICATED_USER_SHARING | false                                              | Shares conversion history between all unauthenticated users                                                                                                   |
 | MAX_CONVERT_PROCESS          | 0                                                  | Maximum number of concurrent conversion processes allowed. Set to 0 for unlimited.                                                                            |
 | PORT                         | 3000                                               | Application listen port                                                                                                                                       |
+| ENNIO_AUTH                   | false                                              | Sign in with the shared ennio.vip login instead of local ConvertX accounts                                                                                    |
+| ENNIO_API                    | https://api.ennio.vip                              | The ennio.vip API that verifies the shared token                                                                                                              |
+| ENNIO_PROJECT                | convertx                                           | The project slug. It becomes the token audience                                                                                                               |
+
+### The ennio.vip login
+
+This fork can use the shared login from [ennio.vip](https://ennio.vip). Set
+`ENNIO_AUTH=true`. The local account forms close. The login page loads
+`https://api.ennio.vip/v1/auth.js` and the server trades the library's
+five-minute token for a ConvertX session:
+
+1. The browser gets a token for the `convertx` audience.
+2. It posts the token to `/auth/ennio`.
+3. The server posts the token to `/v1/auth/verify?aud=convertx`. Only a valid
+   answer creates the session.
+4. The local user row is keyed by the ennio account id, so jobs and history
+   stay with the person after an email change.
+
+The service needs outbound HTTPS to `ENNIO_API`. Signing out closes the
+ennio.vip session too.
 
 ### Docker images
 
