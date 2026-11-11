@@ -89,11 +89,18 @@ export async function upsertEnnioUser(claims: EnnioClaims): Promise<User> {
   // random and is never given out, so the local login form cannot open this row.
   const unusablePassword = await Bun.password.hash(randomUUID());
 
-  db.query("INSERT INTO users (email, password, ennio_id) VALUES (?, ?, ?)").run(
+  db.query("INSERT OR IGNORE INTO users (email, password, ennio_id) VALUES (?, ?, ?)").run(
     claims.email,
     unusablePassword,
     claims.sub,
   );
 
-  return db.query("SELECT * FROM users WHERE ennio_id = ?").as(User).get(claims.sub) as User;
+  const created = db
+    .query("SELECT * FROM users WHERE ennio_id = ?")
+    .as(User)
+    .get(claims.sub) as User | null;
+
+  if (!created) throw new Error("Could not create the local user row.");
+
+  return created;
 }
